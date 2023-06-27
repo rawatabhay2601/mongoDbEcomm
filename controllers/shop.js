@@ -1,4 +1,5 @@
 const Product = require('../models/product');
+const Order = require('../models/order');
 
 exports.getProducts = (req, res, next) => {
   Product.find()
@@ -79,19 +80,40 @@ exports.postCartDeleteProduct = (req, res, next) => {
     .catch(err => console.log(err));
 };
 
-exports.postOrder = (req, res, next) => {
-  let fetchedCart;
+exports.postOrder =  (req, res, next) => {
+  
   req.user
-    .addOrder()
-    .then(result => {
-      res.redirect('/orders');
-    })
-    .catch(err => console.log(err));
+    .populate('cart.items.productId')
+    .execPopulate()
+    .then(async(user) => {
+      
+      const products = user.cart.items.map(i => {
+        return {quantity: i.quantity, product: i.productId};
+      });
+      console.log("Products : ",products);
+      const order = new Order({
+        user: {
+          name: req.user.name,
+          userId: req.user
+        },
+        products: products
+    });
+    
+    req.user.cart.items = [];
+    const promiseUser =  req.user.save();
+    const promiseOrder = order.save();
+
+    return Promise.all([promiseUser,promiseOrder]);
+  })
+  .then( () => {
+    res.redirect('/orders');
+  })
+  .catch(err => console.log(err));
 };
 
 exports.getOrders = (req, res, next) => {
-  req.user
-    .getOrders()
+  const id = req.user._id;
+    Order.find({'user.userId': id})
     .then(orders => {
       res.render('shop/orders', {
         path: '/orders',
